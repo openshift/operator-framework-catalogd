@@ -1,0 +1,8 @@
+# Administrators of this repo are controlled via GitHub teams, not this file
+
+approvers:
+- catalogd-approvers
+
+reviewers:
+- catalogd-approvers
+- catalogd-reviewers
