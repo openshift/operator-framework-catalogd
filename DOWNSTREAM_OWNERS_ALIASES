@@ -1,0 +1,29 @@
+aliases:
+   # Contributors who can approve any PRs in the repo
+   catalogd-approvers:
+   - awgreene
+   - grokspawn
+   - jmprusi
+   - joelanford
+   - kevinrizza
+   - ncdc
+   - oceanc80
+   - perdasilva
+   - stevekuznetsov
+
+   # Contributors who can review/lgtm any PRs in the repo
+   catalogd-reviewers:
+   - anik120
+   - ankitathomas
+   - awgreene
+   - dtfranz
+   - grokspawn
+   - jmprusi
+   - joelanford
+   - kevinrizza
+   - m1kola
+   - ncdc
+   - oceanc80
+   - perdasilva
+   - stevekuznetsov
+   - tmshort
