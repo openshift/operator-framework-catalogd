@@ -58,6 +58,7 @@ spec:
             capabilities:
               drop:
                 - ALL
+          terminationMessagePolicy: FallbackToLogsOnError
         - args:
             - --leader-elect
             - --metrics-bind-address=127.0.0.1:8080
@@ -88,6 +89,7 @@ spec:
             capabilities:
               drop:
                 - ALL
+          terminationMessagePolicy: FallbackToLogsOnError
           volumeMounts:
             - mountPath: /var/cache/
               name: cache

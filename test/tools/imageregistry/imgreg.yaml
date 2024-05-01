@@ -57,6 +57,7 @@ spec:
           value: "/certs/tls.crt"
         - name: REGISTRY_HTTP_TLS_KEY
           value: "/certs/tls.key"
+        terminationMessagePolicy: FallbackToLogsOnError
       volumes:
         - name: certs-vol
           secret:
