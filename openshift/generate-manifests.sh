@@ -50,6 +50,12 @@ trap 'rm -rf $TMP_ROOT' EXIT
 TMP_CONFIG="${TMP_ROOT}/config"
 cp -a "${REPO_ROOT}/config" "$TMP_CONFIG"
 
+# Handle move of catalogd's config/default to config/base/default
+if [ ! -d "${TMP_CONFIG}/default" -a -d "${TMP_CONFIG}/base/default" ]; then
+    TMP_CONFIG="${TMP_CONFIG}/base"
+fi
+echo "TMP_CONFIG=${TMP_CONFIG}"
+
 # Override namespace to openshift-catalogd
 $YQ -i ".namespace = \"${NAMESPACE}\"" "${TMP_CONFIG}/default/kustomization.yaml"
 
