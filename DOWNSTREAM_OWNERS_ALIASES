@@ -8,6 +8,7 @@ aliases:
    - perdasilva
    - stevekuznetsov
    - m1kola
+   - everettraven
 
    # Contributors who can review/lgtm any PRs in the repo
    catalogd-reviewers:
@@ -22,3 +23,4 @@ aliases:
    - perdasilva
    - stevekuznetsov
    - tmshort
+   - everettraven
