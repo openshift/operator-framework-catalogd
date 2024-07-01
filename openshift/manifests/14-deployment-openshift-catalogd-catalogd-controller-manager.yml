@@ -11,7 +11,7 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      control-plane: controller-manager
+      control-plane: catalogd-controller-manager
   template:
     metadata:
       annotations:
@@ -19,7 +19,7 @@ spec:
         target.workload.openshift.io/management: '{"effect": "PreferredDuringScheduling"}'
         openshift.io/required-scc: restricted-v2
       labels:
-        control-plane: controller-manager
+        control-plane: catalogd-controller-manager
     spec:
       affinity:
         nodeAffinity:
@@ -59,10 +59,11 @@ spec:
             capabilities:
               drop:
                 - ALL
+          terminationMessagePolicy: FallbackToLogsOnError
         - args:
             - --leader-elect
             - --metrics-bind-address=127.0.0.1:8080
-            - --http-external-address=http://catalogd-catalogserver.openshift-catalogd.svc
+            - --external-address=catalogd-catalogserver.openshift-catalogd.svc
           command:
             - ./manager
           image: ${CATALOGD_IMAGE}
@@ -89,6 +90,7 @@ spec:
             capabilities:
               drop:
                 - ALL
+          terminationMessagePolicy: FallbackToLogsOnError
           volumeMounts:
             - mountPath: /var/cache/
               name: cache

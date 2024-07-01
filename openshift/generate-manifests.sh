@@ -29,7 +29,7 @@ IMAGE_MAPPINGS[manager]='${CATALOGD_IMAGE}'
 #  - --flagname=two
 declare -A FLAG_MAPPINGS
 # shellcheck disable=SC2016
-FLAG_MAPPINGS[http-external-address]='http://catalogd-catalogserver.openshift-catalogd.svc'
+FLAG_MAPPINGS[external-address]='catalogd-catalogserver.openshift-catalogd.svc'
 
 ##################################################
 # You shouldn't need to change anything below here

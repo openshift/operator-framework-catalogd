@@ -8,16 +8,18 @@ Catalogd helps customers discover installable content by hosting catalog metadat
 [![asciicast](https://asciinema.org/a/624043.svg)](https://asciinema.org/a/624043)
 
 ## Quickstart Steps
-**NOTE:** Procedure steps marked with an asterisk (`*`) are likely to change with future API updates.
+Procedure steps marked with an asterisk (`*`) are likely to change with future API updates.
+
+**NOTE:** The examples below use the `-k` flag in curl to skip validating the TLS certificates. This is for demonstration purposes only.
 
 1. To install catalogd, navigate to the [releases](https://github.com/operator-framework/catalogd/releases/) page, and follow the install instructions included in the release you want to install.
 
-1. Create a `Catalog` object that points to the OperatorHub Community catalog by running the following command:
+1. Create a `ClusterCatalog` object that points to the OperatorHub Community catalog by running the following command:
 
     ```sh
     $ kubectl apply -f - << EOF
     apiVersion: catalogd.operatorframework.io/v1alpha1
-    kind: Catalog
+    kind: ClusterCatalog
     metadata:
       name: operatorhubio
     spec:
@@ -28,10 +30,10 @@ Catalogd helps customers discover installable content by hosting catalog metadat
     EOF
     ```
 
-1. Verify the `Catalog` object was created successfully by running the following command:
+1. Verify the `ClusterCatalog` object was created successfully by running the following command:
 
     ```sh
-    $ kubectl describe catalog/operatorhubio
+    $ kubectl describe clustercatalog/operatorhubio
     ```
     
     *Example output*
@@ -41,7 +43,7 @@ Catalogd helps customers discover installable content by hosting catalog metadat
     Labels:       <none>
     Annotations:  <none>
     API Version:  catalogd.operatorframework.io/v1alpha1
-    Kind:         Catalog
+    Kind:         ClusterCatalog
     Metadata:
       Creation Timestamp:  2023-06-23T18:35:13Z
       Generation:          1
@@ -93,15 +95,15 @@ Catalogd helps customers discover installable content by hosting catalog metadat
     Events:                    <none>
     ```
 
-1. Port forward the `catalogd-catalogserver` service in the `catalogd-system` namespace:
+1. Port forward the `catalogd-catalogserver` service in the `olmv1-system` namespace:
     ```sh
-    $ kubectl -n catalogd-system port-forward svc/catalogd-catalogserver 8080:80
+    $ kubectl -n olmv1-system port-forward svc/catalogd-catalogserver 8080:443
     ```
 
 1. Run the following command to get a list of packages:
 
     ```sh
-    $ curl http://localhost:8080/catalogs/operatorhubio/all.json | jq -s '.[] | select(.schema == "olm.package") | .name'
+    $ curl -k https://localhost:8080/catalogs/operatorhubio/all.json | jq -s '.[] | select(.schema == "olm.package") | .name'
     ```
 
     *Example output*
@@ -128,7 +130,7 @@ Catalogd helps customers discover installable content by hosting catalog metadat
 1. Run the following command to get a list of channels for the `ack-acm-controller` package:
 
     ```sh
-    $ curl http://localhost:8080/catalogs/operatorhubio/all.json | jq -s '.[] | select(.schema == "olm.channel") | select(.package == "ack-acm-controller") | .name'
+    $ curl -k https://localhost:8080/catalogs/operatorhubio/all.json | jq -s '.[] | select(.schema == "olm.channel") | select(.package == "ack-acm-controller") | .name'
     ```
 
     *Example output*
@@ -142,7 +144,7 @@ Catalogd helps customers discover installable content by hosting catalog metadat
 1. Run the following command to get a list of bundles belonging to the `ack-acm-controller` package:
 
     ```sh
-    $ curl http://localhost:8080/catalogs/operatorhubio/all.json | jq -s '.[] | select(.schema == "olm.bundle") | select(.package == "ack-acm-controller") | .name'
+    $ curl -k https://localhost:8080/catalogs/operatorhubio/all.json | jq -s '.[] | select(.schema == "olm.bundle") | select(.package == "ack-acm-controller") | .name'
     ```
     
     *Example output*

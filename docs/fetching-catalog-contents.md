@@ -1,13 +1,16 @@
-# Fetching `Catalog` contents from the Catalogd HTTP Server
-This document covers how to fetch the contents for a `Catalog` from the
-Catalogd HTTP Server that runs when the `HTTPServer` feature-gate is enabled
-(enabled by default).
+# Fetching `ClusterCatalog` contents from the Catalogd HTTP Server
+This document covers how to fetch the contents for a `ClusterCatalog` from the
+Catalogd HTTP(S) Server.
 
 For example purposes we make the following assumption:
-- A `Catalog` named `operatorhubio` has been created and successfully unpacked
-(denoted in the `Catalog.Status`)
+- A `ClusterCatalog` named `operatorhubio` has been created and successfully unpacked
+(denoted in the `ClusterCatalog.Status`)
 
-`Catalog` CRs have a status.contentURL field whose value is the location where the content 
+**NOTE:** By default, Catalogd is configured to use TLS with self-signed certificates.
+For local development, consider skipping TLS verification, such as `curl -k`, or reference external material
+on self-signed certificate verification.
+
+`ClusterCatalog` CRs have a status.contentURL field whose value is the location where the content 
 of a catalog can be read from:
 
 ```yaml
@@ -18,7 +21,7 @@ of a catalog can be read from:
       reason: UnpackSuccessful
       status: "True"
       type: Unpacked
-    contentURL: http://catalogd-catalogserver.catalogd-system.svc/catalogs/operatorhubio/all.json
+    contentURL: https://catalogd-catalogserver.olmv1-system.svc/catalogs/operatorhubio/all.json
     phase: Unpacked
     resolvedSource:
       image:
@@ -32,33 +35,33 @@ object.
 
 ## On cluster
 
-When making a request for the contents of the `operatorhubio` `Catalog` from within
+When making a request for the contents of the `operatorhubio` `ClusterCatalog` from within
 the cluster issue a HTTP `GET` request to 
-`http://catalogd-catalogserver.catalogd-system.svc/catalogs/operatorhubio/all.json`
+`https://catalogd-catalogserver.olmv1-system.svc/catalogs/operatorhubio/all.json`
 
 An example command to run a `Pod` to `curl` the catalog contents:
 ```sh
-kubectl run fetcher --image=curlimages/curl:latest -- curl http://catalogd-catalogserver.catalogd-system.svc/catalogs/operatorhubio/all.json
+kubectl run fetcher --image=curlimages/curl:latest -- curl https://catalogd-catalogserver.olmv1-system.svc/catalogs/operatorhubio/all.json
 ```
 
 ## Off cluster
 
-When making a request for the contents of the `operatorhubio` `Catalog` from outside
+When making a request for the contents of the `operatorhubio` `ClusterCatalog` from outside
 the cluster, we have to perform an extra step:
-1. Port forward the `catalogd-catalogserver` service in the `catalogd-system` namespace:
+1. Port forward the `catalogd-catalogserver` service in the `olmv1-system` namespace:
 ```sh
-kubectl -n catalogd-system port-forward svc/catalogd-catalogserver 8080:80
+kubectl -n olmv1-system port-forward svc/catalogd-catalogserver 8080:443
 ```
 
 Once the service has been successfully forwarded to a localhost port, issue a HTTP `GET`
-request to `http://localhost:8080/catalogs/operatorhubio/all.json`
+request to `https://localhost:8080/catalogs/operatorhubio/all.json`
 
 An example `curl` request that assumes the port-forwarding is mapped to port 8080 on the local machine:
 ```sh
 curl http://localhost:8080/catalogs/operatorhubio/all.json
 ```
 
-# Fetching `Catalog` contents from the `Catalogd` Service outside of the cluster
+# Fetching `ClusterCatalog` contents from the `Catalogd` Service outside of the cluster
 
 This section outlines a way of exposing the `Catalogd` Service's endpoints outside the cluster and then accessing the catalog contents using `Ingress`. We will be using `Ingress NGINX` Controller for the sake of this example but you are welcome to use the `Ingress` Controller of your choice.
 
@@ -74,12 +77,12 @@ This section outlines a way of exposing the `Catalogd` Service's endpoints outsi
   ```
   By running that above command, the `Ingress` Controller is installed. Along with it, the `Ingress` Resource will be applied automatically as well, thereby creating an `Ingress` Object on the cluster.
 
-1. Once the prerequisites are satisfied, create a `Catalog` object that points to the OperatorHub Community catalog by running the following command:
+1. Once the prerequisites are satisfied, create a `ClusterCatalog` object that points to the OperatorHub Community catalog by running the following command:
 
     ```sh
       $ kubectl apply -f - << EOF
       apiVersion: catalogd.operatorframework.io/v1alpha1
-      kind: Catalog
+      kind: ClusterCatalog
         metadata:
           name: operatorhubio
         spec:
@@ -90,20 +93,20 @@ This section outlines a way of exposing the `Catalogd` Service's endpoints outsi
         EOF
     ```
 
-1. Before proceeding further, let's verify that the `Catalog` object was created successfully by running the below command: 
+1. Before proceeding further, let's verify that the `ClusterCatalog` object was created successfully by running the below command: 
 
     ```sh
       $ kubectl describe catalog/operatorhubio
     ```
 
-1. At this point the `Catalog` object exists and `Ingress` controller is ready to process requests. The sample `Ingress` Resource that was created during Step 4 of Prerequisites is shown as below: 
+1. At this point the `ClusterCatalog` object exists and `Ingress` controller is ready to process requests. The sample `Ingress` Resource that was created during Step 4 of Prerequisites is shown as below: 
 
     ```yaml
       apiVersion: networking.k8s.io/v1
       kind: Ingress
       metadata:
         name: catalogd-nginx-ingress
-        namespace: catalogd-system
+        namespace: olmv1-system
       spec:
         ingressClassName: nginx
         rules:
@@ -120,18 +123,18 @@ This section outlines a way of exposing the `Catalogd` Service's endpoints outsi
     Let's verify that the `Ingress` object got created successfully from the sample by running the following command:
 
       ```sh
-        $ kubectl describe ingress/catalogd-ingress -n catalogd-system
+        $ kubectl describe ingress/catalogd-ingress -n olmv1-system
       ```
 
 1. Run the below example `curl` request to retrieve all of the catalog contents:
 
     ```sh
-      $ curl http://<address>/catalogs/operatorhubio/all.json
+      $ curl https://<address>/catalogs/operatorhubio/all.json
     ```
     
     To obtain `address` of the ingress object, you can run the below command and look for the value in the `ADDRESS` field from output: 
     ```sh
-      $ kubectl -n catalogd-system get ingress
+      $ kubectl -n olmv1-system get ingress
     ```
    
     You can further use the `curl` commands outlined in the [Catalogd README](https://github.com/operator-framework/catalogd/blob/main/README.md) to filter out the JSON content by list of bundles, channels & packages.

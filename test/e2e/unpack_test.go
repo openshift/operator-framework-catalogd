@@ -7,9 +7,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/google/go-cmp/cmp"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/google/go-cmp/cmp"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,21 +39,21 @@ func catalogImageRef() string {
 	return "docker-registry.catalogd-e2e.svc:5000/test-catalog:e2e"
 }
 
-var _ = Describe("Catalog Unpacking", func() {
+var _ = Describe("ClusterCatalog Unpacking", func() {
 	var (
 		ctx     context.Context
-		catalog *catalogd.Catalog
+		catalog *catalogd.ClusterCatalog
 	)
-	When("A Catalog is created", func() {
+	When("A ClusterCatalog is created", func() {
 		BeforeEach(func() {
 			ctx = context.Background()
 			var err error
 
-			catalog = &catalogd.Catalog{
+			catalog = &catalogd.ClusterCatalog{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: catalogName,
 				},
-				Spec: catalogd.CatalogSpec{
+				Spec: catalogd.ClusterCatalogSpec{
 					Source: catalogd.CatalogSource{
 						Type: catalogd.SourceTypeImage,
 						Image: &catalogd.ImageSource{
@@ -68,7 +69,7 @@ var _ = Describe("Catalog Unpacking", func() {
 		})
 
 		It("Successfully unpacks catalog contents", func() {
-			By("Ensuring Catalog has Status.Condition of Unpacked with a status == True")
+			By("Ensuring ClusterCatalog has Status.Condition of Unpacked with a status == True")
 			Eventually(func(g Gomega) {
 				err := c.Get(ctx, types.NamespacedName{Name: catalog.Name}, catalog)
 				g.Expect(err).ToNot(HaveOccurred())
@@ -91,9 +92,13 @@ var _ = Describe("Catalog Unpacking", func() {
 			name := strings.Split(url.Hostname(), ".")[0]
 			port := url.Port()
 			// the ProxyGet() call below needs an explicit port value, so if
-			// value from url.Port() is empty, we assume port 80.
+			// value from url.Port() is empty, we assume port 443.
 			if port == "" {
-				port = "80"
+				if url.Scheme == "https" {
+					port = "443"
+				} else {
+					port = "80"
+				}
 			}
 			resp := kubeClient.CoreV1().Services(ns).ProxyGet(url.Scheme, name, port, url.Path, map[string]string{})
 			rc, err := resp.Stream(ctx)
@@ -110,7 +115,7 @@ var _ = Describe("Catalog Unpacking", func() {
 		AfterEach(func() {
 			Expect(c.Delete(ctx, catalog)).To(Succeed())
 			Eventually(func(g Gomega) {
-				err = c.Get(ctx, types.NamespacedName{Name: catalog.Name}, &catalogd.Catalog{})
+				err = c.Get(ctx, types.NamespacedName{Name: catalog.Name}, &catalogd.ClusterCatalog{})
 				g.Expect(errors.IsNotFound(err)).To(BeTrue())
 			}).Should(Succeed())
 		})

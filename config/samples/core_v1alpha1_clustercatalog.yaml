@@ -1,0 +1,10 @@
+apiVersion: catalogd.operatorframework.io/v1alpha1
+kind: ClusterCatalog
+metadata:
+  name: operatorhubio
+spec:
+  source:
+    type: image
+    image:
+      pollInterval: 24h
+      ref: quay.io/operatorhubio/catalog:latest

@@ -12,9 +12,11 @@ import (
 	"path/filepath"
 	"testing/fstest"
 
-	"github.com/google/go-cmp/cmp"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/operator-framework/operator-registry/alpha/declcfg"
 )
 
@@ -57,7 +59,7 @@ var _ = Describe("LocalDir Storage Test", func() {
 	})
 	When("An unpacked FBC is stored using LocalDir", func() {
 		BeforeEach(func() {
-			err := store.Store(catalog, unpackResultFS)
+			err := store.Store(context.Background(), catalog, unpackResultFS)
 			Expect(err).To(Not(HaveOccurred()))
 		})
 		It("should store the content in the RootDir correctly", func() {

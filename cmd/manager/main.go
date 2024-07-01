@@ -19,39 +19,32 @@ package main
 import (
 	"flag"
 	"fmt"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"time"
 
-	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
-	// to ensure that exec-entrypoint and run can make use of them.
-	"k8s.io/client-go/metadata"
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
-
+	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/metadata"
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	"github.com/spf13/pflag"
-
+	"github.com/operator-framework/catalogd/api/core/v1alpha1"
 	"github.com/operator-framework/catalogd/internal/garbagecollection"
+	"github.com/operator-framework/catalogd/internal/serverutil"
 	"github.com/operator-framework/catalogd/internal/source"
-	"github.com/operator-framework/catalogd/internal/third_party/server"
 	"github.com/operator-framework/catalogd/internal/version"
 	corecontrollers "github.com/operator-framework/catalogd/pkg/controllers/core"
 	"github.com/operator-framework/catalogd/pkg/features"
 	catalogdmetrics "github.com/operator-framework/catalogd/pkg/metrics"
 	"github.com/operator-framework/catalogd/pkg/storage"
-
-	//+kubebuilder:scaffold:imports
-	"github.com/operator-framework/catalogd/api/core/v1alpha1"
 )
 
 var (
@@ -77,9 +70,11 @@ func main() {
 		catalogdVersion      bool
 		systemNamespace      string
 		catalogServerAddr    string
-		httpExternalAddr     string
+		externalAddr         string
 		cacheDir             string
 		gcInterval           time.Duration
+		certFile             string
+		keyFile              string
 	)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -89,10 +84,12 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&systemNamespace, "system-namespace", "", "The namespace catalogd uses for internal state, configuration, and workloads")
 	flag.StringVar(&catalogServerAddr, "catalogs-server-addr", ":8083", "The address where the unpacked catalogs' content will be accessible")
-	flag.StringVar(&httpExternalAddr, "http-external-address", "http://catalogd-catalogserver.catalogd-system.svc", "The external address at which the http server is reachable.")
+	flag.StringVar(&externalAddr, "external-address", "catalogd-catalogserver.olmv1-system.svc", "The external address at which the http(s) server is reachable.")
 	flag.StringVar(&cacheDir, "cache-dir", "/var/cache/", "The directory in the filesystem that catalogd will use for file based caching")
 	flag.BoolVar(&catalogdVersion, "version", false, "print the catalogd version and exit")
 	flag.DurationVar(&gcInterval, "gc-interval", 12*time.Hour, "interval in which garbage collection should be run against the catalog content cache")
+	flag.StringVar(&certFile, "tls-cert", "", "The certificate file used for serving catalog contents over HTTPS. Requires tls-key.")
+	flag.StringVar(&keyFile, "tls-key", "", "The key file used for serving catalog contents over HTTPS. Requires tls-cert.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -109,6 +106,18 @@ func main() {
 	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	if (certFile != "" && keyFile == "") || (certFile == "" && keyFile != "") {
+		setupLog.Error(nil, "unable to configure TLS certificates: tls-cert and tls-key flags must be used together")
+		os.Exit(1)
+	}
+
+	protocol := "http://"
+	if certFile != "" && keyFile != "" {
+		protocol = "https://"
+	}
+	externalAddr = protocol + externalAddr
+
 	cfg := ctrl.GetConfigOrDie()
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme,
@@ -149,38 +158,34 @@ func main() {
 		os.Exit(1)
 	}
 
-	baseStorageURL, err := url.Parse(fmt.Sprintf("%s/catalogs/", httpExternalAddr))
+	baseStorageURL, err := url.Parse(fmt.Sprintf("%s/catalogs/", externalAddr))
 	if err != nil {
 		setupLog.Error(err, "unable to create base storage URL")
 		os.Exit(1)
 	}
 
 	localStorage = storage.LocalDir{RootDir: storeDir, BaseURL: baseStorageURL}
-	shutdownTimeout := 30 * time.Second
-	catalogServer := server.Server{
-		Kind: "catalogs",
-		Server: &http.Server{
-			Addr:        catalogServerAddr,
-			Handler:     catalogdmetrics.AddMetricsToHandler(localStorage.StorageServerHandler()),
-			ReadTimeout: 5 * time.Second,
-			// TODO: Revert this to 10 seconds if/when the API
-			// evolves to have significantly smaller responses
-			WriteTimeout: 5 * time.Minute,
-		},
-		ShutdownTimeout: &shutdownTimeout,
+
+	catalogServerConfig := serverutil.CatalogServerConfig{
+		ExternalAddr: externalAddr,
+		CatalogAddr:  catalogServerAddr,
+		CertFile:     certFile,
+		KeyFile:      keyFile,
+		LocalStorage: localStorage,
 	}
 
-	if err := mgr.Add(&catalogServer); err != nil {
-		setupLog.Error(err, "unable to start catalog server")
+	err = serverutil.AddCatalogServerToManager(mgr, catalogServerConfig)
+	if err != nil {
+		setupLog.Error(err, "unable to configure catalog server")
 		os.Exit(1)
 	}
 
-	if err = (&corecontrollers.CatalogReconciler{
+	if err = (&corecontrollers.ClusterCatalogReconciler{
 		Client:   mgr.GetClient(),
 		Unpacker: unpacker,
 		Storage:  localStorage,
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Catalog")
+		setupLog.Error(err, "unable to create controller", "controller", "ClusterCatalog")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
@@ -208,7 +213,7 @@ func main() {
 		Interval:       gcInterval,
 	}
 	if err := mgr.Add(gc); err != nil {
-		setupLog.Error(err, "problem adding garbage collector to manager")
+		setupLog.Error(err, "unable to add garbage collector to manager")
 		os.Exit(1)
 	}
 
@@ -222,7 +227,7 @@ func main() {
 func podNamespace() string {
 	namespace, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err != nil {
-		return "catalogd-system"
+		return "olmv1-system"
 	}
 	return string(namespace)
 }
