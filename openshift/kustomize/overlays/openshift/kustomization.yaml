@@ -1,0 +1,17 @@
+# Adds namespace to all resources.
+namespace: openshift-catalogd
+
+resources:
+- ../../../../base/crd
+- ../../../../base/rbac
+- ../../../../base/manager
+
+patches:
+- target:
+    kind: Service
+    name: controller-manager
+  path: patches/manager_service.yaml
+- target:
+    kind: Deployment
+    name: controller-manager
+  path: patches/manager_deployment_certs.yaml
