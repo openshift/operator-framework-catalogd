@@ -65,6 +65,8 @@ spec:
             - --leader-elect
             - --metrics-bind-address=127.0.0.1:8080
             - --external-address=catalogd-catalogserver.openshift-catalogd.svc
+            - --tls-cert=/var/certs/tls.crt
+            - --tls-key=/var/certs/tls.key
           command:
             - ./manager
           image: ${CATALOGD_IMAGE}
@@ -95,6 +97,8 @@ spec:
           volumeMounts:
             - mountPath: /var/cache/
               name: cache
+            - mountPath: /var/certs
+              name: catalogserver-certs
       securityContext:
         runAsNonRoot: true
         seccompProfile:
@@ -104,4 +108,8 @@ spec:
       volumes:
         - emptyDir: {}
           name: cache
+        - name: catalogserver-certs
+          secret:
+            optional: false
+            secretName: catalogserver-cert
       priorityClassName: system-cluster-critical
