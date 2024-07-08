@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: catalogd
     app.kubernetes.io/part-of: olm
-  name: catalogd-proxy-role
+  name: proxy-role
 rules:
   - apiGroups:
       - authentication.k8s.io

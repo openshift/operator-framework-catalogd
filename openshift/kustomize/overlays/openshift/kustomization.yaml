@@ -1,15 +1,17 @@
 # Adds namespace to all resources.
 namespace: openshift-catalogd
 
+namePrefix: catalogd-
+
 resources:
-- ../../../../base/crd
-- ../../../../base/rbac
-- ../../../../base/manager
+- ../../../../config/base/crd
+- ../../../../config/base/rbac
+- ../../../../config/base/manager
 
 patches:
 - target:
     kind: Service
-    name: controller-manager
+    name: catalogserver
   path: patches/manager_service.yaml
 - target:
     kind: Deployment

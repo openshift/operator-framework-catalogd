@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: catalogd
     app.kubernetes.io/part-of: olm
-  name: catalogd-metrics-reader
+  name: metrics-reader
 rules:
   - nonResourceURLs:
       - /metrics

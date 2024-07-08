@@ -2,16 +2,18 @@
 apiVersion: v1
 kind: Service
 metadata:
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: catalogserver-cert
   labels:
     app.kubernetes.io/name: catalogd
     app.kubernetes.io/part-of: olm
-  name: catalogd-controller-manager-metrics-service
+  name: catalogserver
   namespace: openshift-catalogd
 spec:
   ports:
-    - name: https
-      port: 8443
+    - name: http
+      port: 80
       protocol: TCP
-      targetPort: https
+      targetPort: 8083
   selector:
     control-plane: catalogd-controller-manager

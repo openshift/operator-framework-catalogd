@@ -5,12 +5,12 @@ metadata:
   labels:
     app.kubernetes.io/name: catalogd
     app.kubernetes.io/part-of: olm
-  name: catalogd-proxy-rolebinding
+  name: manager-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: catalogd-proxy-role
+  name: manager-role
 subjects:
   - kind: ServiceAccount
-    name: catalogd-controller-manager
+    name: controller-manager
     namespace: openshift-catalogd
