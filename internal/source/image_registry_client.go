@@ -14,8 +14,6 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/archive"
-	"github.com/google/go-containerregistry/pkg/authn/k8schain"
-	gcrkube "github.com/google/go-containerregistry/pkg/authn/kubernetes"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,42 +48,17 @@ func (i *ImageRegistry) Unpack(ctx context.Context, catalog *catalogdv1alpha1.Cl
 		return nil, catalogderrors.NewUnrecoverable(fmt.Errorf("error parsing image reference: %w", err))
 	}
 
-	remoteOpts := []remote.Option{}
-	if catalog.Spec.Source.Image.PullSecret != "" {
-		chainOpts := k8schain.Options{
-			ImagePullSecrets: []string{catalog.Spec.Source.Image.PullSecret},
-			Namespace:        i.AuthNamespace,
-			// TODO: Do we want to use any secrets that are included in the catalogd service account?
-			// If so, we will need to add the permission to get service accounts and specify
-			// the catalogd service account name here.
-			ServiceAccountName: gcrkube.NoServiceAccount,
-		}
-		authChain, err := k8schain.NewInCluster(ctx, chainOpts)
-		if err != nil {
-			return nil, fmt.Errorf("error getting auth keychain: %w", err)
-		}
+	var remoteOpts []remote.Option
 
-		remoteOpts = append(remoteOpts, remote.WithAuthFromKeychain(authChain))
+	// Set up the TLS transport
+	tlsTransport := remote.DefaultTransport.(*http.Transport).Clone()
+	if tlsTransport.TLSClientConfig == nil {
+		tlsTransport.TLSClientConfig = &tls.Config{
+			InsecureSkipVerify: false,
+			MinVersion:         tls.VersionTLS12,
+		} // nolint:gosec
 	}
-
-	if catalog.Spec.Source.Image.InsecureSkipTLSVerify {
-		insecureTransport := remote.DefaultTransport.(*http.Transport).Clone()
-		if insecureTransport.TLSClientConfig == nil {
-			insecureTransport.TLSClientConfig = &tls.Config{} // nolint:gosec
-		}
-		insecureTransport.TLSClientConfig.InsecureSkipVerify = true // nolint:gosec
-		remoteOpts = append(remoteOpts, remote.WithTransport(insecureTransport))
-	}
-
-	digest, isDigest := imgRef.(name.Digest)
-	if isDigest {
-		hexVal := strings.TrimPrefix(digest.DigestStr(), "sha256:")
-		unpackPath := filepath.Join(i.BaseCachePath, catalog.Name, hexVal)
-		if stat, err := os.Stat(unpackPath); err == nil && stat.IsDir() {
-			l.V(1).Info("found image in filesystem cache", "digest", hexVal)
-			return unpackedResult(os.DirFS(unpackPath), catalog, digest.String()), nil
-		}
-	}
+	remoteOpts = append(remoteOpts, remote.WithTransport(tlsTransport))
 
 	// always fetch the hash
 	imgDesc, err := remote.Head(imgRef, remoteOpts...)
@@ -115,6 +88,7 @@ func (i *ImageRegistry) Unpack(ctx context.Context, catalog *catalogdv1alpha1.Cl
 					},
 				)
 			}
+			_, isDigest := imgRef.(name.Digest)
 			return nil, wrapUnrecoverable(fmt.Errorf("error unpacking image: %w", err), isDigest)
 		}
 	} else if err != nil {
