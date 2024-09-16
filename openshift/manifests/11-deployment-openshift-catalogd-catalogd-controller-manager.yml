@@ -64,7 +64,7 @@ spec:
         - args:
             - --leader-elect
             - --metrics-bind-address=127.0.0.1:8080
-            - --external-address=catalogd-catalogserver.openshift-catalogd.svc
+            - --external-address=catalogd-service.openshift-catalogd.svc
             - --tls-cert=/var/certs/tls.crt
             - --tls-key=/var/certs/tls.key
           command:
