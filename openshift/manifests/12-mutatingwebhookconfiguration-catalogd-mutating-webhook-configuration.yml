@@ -2,6 +2,8 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
+  annotations:
+    service.beta.openshift.io/inject-cabundle: "true"
   name: catalogd-mutating-webhook-configuration
 webhooks:
   - admissionReviewVersions:
@@ -9,7 +11,7 @@ webhooks:
     clientConfig:
       service:
         name: catalogd-service
-        namespace: olmv1-system
+        namespace: openshift-catalogd
         path: /mutate-olm-operatorframework-io-v1-clustercatalog
         port: 9443
     failurePolicy: Fail
