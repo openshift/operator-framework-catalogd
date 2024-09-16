@@ -31,8 +31,6 @@ type ImageRegistry struct {
 	AuthNamespace string
 }
 
-const ConfigDirLabel = "operators.operatorframework.io.index.configs.v1"
-
 func (i *ImageRegistry) Unpack(ctx context.Context, catalog *catalogdv1alpha1.ClusterCatalog) (*Result, error) {
 	l := log.FromContext(ctx)
 	if catalog.Spec.Source.Type != catalogdv1alpha1.SourceTypeImage {
@@ -97,13 +95,6 @@ func (i *ImageRegistry) Unpack(ctx context.Context, catalog *catalogdv1alpha1.Cl
 
 	resolvedRef := fmt.Sprintf("%s@sha256:%s", imgRef.Context().Name(), imgDesc.Digest.Hex)
 	return unpackedResult(os.DirFS(unpackPath), catalog, resolvedRef), nil
-}
-
-func wrapUnrecoverable(err error, isUnrecoverable bool) error {
-	if isUnrecoverable {
-		return catalogderrors.NewUnrecoverable(err)
-	}
-	return err
 }
 
 func (i *ImageRegistry) Cleanup(_ context.Context, catalog *catalogdv1alpha1.ClusterCatalog) error {

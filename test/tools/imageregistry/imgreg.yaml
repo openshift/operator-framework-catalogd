@@ -25,8 +25,8 @@ spec:
     algorithm: ECDSA
     size: 256
   issuerRef:
-    name: selfsigned-issuer
-    kind: Issuer
+    name: ${ISSUER_NAME}
+    kind: ${ISSUER_KIND}
     group: cert-manager.io
 ---
 apiVersion: apps/v1

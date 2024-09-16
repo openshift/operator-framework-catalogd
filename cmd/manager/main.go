@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/containers/image/v5/types"
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -75,6 +76,8 @@ func main() {
 		gcInterval           time.Duration
 		certFile             string
 		keyFile              string
+		webhookPort          int
+		caCertDir            string
 	)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -90,6 +93,8 @@ func main() {
 	flag.DurationVar(&gcInterval, "gc-interval", 12*time.Hour, "interval in which garbage collection should be run against the catalog content cache")
 	flag.StringVar(&certFile, "tls-cert", "", "The certificate file used for serving catalog contents over HTTPS. Requires tls-key.")
 	flag.StringVar(&keyFile, "tls-key", "", "The key file used for serving catalog contents over HTTPS. Requires tls-cert.")
+	flag.IntVar(&webhookPort, "webhook-server-port", 9443, "The port that the mutating webhook server serves at.")
+	flag.StringVar(&caCertDir, "ca-certs-dir", "", "The directory of CA certificate to use for verifying HTTPS connections to image registries.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -143,10 +148,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	unpacker, err := source.NewDefaultUnpacker(systemNamespace, cacheDir)
-	if err != nil {
-		setupLog.Error(err, "unable to create unpacker")
+	unpackCacheBasePath := filepath.Join(cacheDir, source.UnpackCacheDir)
+	if err := os.MkdirAll(unpackCacheBasePath, 0770); err != nil {
+		setupLog.Error(err, "unable to create cache directory for unpacking")
 		os.Exit(1)
+	}
+	unpacker := &source.ContainersImageRegistry{
+		BaseCachePath: unpackCacheBasePath,
+		SourceContext: &types.SystemContext{
+			OCICertPath:    caCertDir,
+			DockerCertPath: caCertDir,
+		},
 	}
 
 	var localStorage storage.Instance
@@ -207,7 +219,7 @@ func main() {
 
 	ctx := ctrl.SetupSignalHandler()
 	gc := &garbagecollection.GarbageCollector{
-		CachePath:      filepath.Join(cacheDir, source.UnpackCacheDir),
+		CachePath:      unpackCacheBasePath,
 		Logger:         ctrl.Log.WithName("garbage-collector"),
 		MetadataClient: metaClient,
 		Interval:       gcInterval,
