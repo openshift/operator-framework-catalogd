@@ -30,3 +30,11 @@ rules:
       - get
       - patch
       - update
+  - apiGroups:
+      - security.openshift.io
+    resourceNames:
+      - privileged
+    resources:
+      - securitycontextconstraints
+    verbs:
+      - use
