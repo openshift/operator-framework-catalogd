@@ -26,7 +26,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/containers/image/v5/types"
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -45,6 +44,7 @@ import (
 	corecontrollers "github.com/operator-framework/catalogd/internal/controllers/core"
 	"github.com/operator-framework/catalogd/internal/features"
 	"github.com/operator-framework/catalogd/internal/garbagecollection"
+	"github.com/operator-framework/catalogd/internal/httputil"
 	catalogdmetrics "github.com/operator-framework/catalogd/internal/metrics"
 	"github.com/operator-framework/catalogd/internal/serverutil"
 	"github.com/operator-framework/catalogd/internal/source"
@@ -91,15 +91,15 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&systemNamespace, "system-namespace", "", "The namespace catalogd uses for internal state, configuration, and workloads")
-	flag.StringVar(&catalogServerAddr, "catalogs-server-addr", ":8443", "The address where the unpacked catalogs' content will be accessible")
-	flag.StringVar(&externalAddr, "external-address", "catalogd-service.olmv1-system.svc", "The external address at which the http(s) server is reachable.")
+	flag.StringVar(&catalogServerAddr, "catalogs-server-addr", ":8083", "The address where the unpacked catalogs' content will be accessible")
+	flag.StringVar(&externalAddr, "external-address", "catalogd-catalogserver.olmv1-system.svc", "The external address at which the http(s) server is reachable.")
 	flag.StringVar(&cacheDir, "cache-dir", "/var/cache/", "The directory in the filesystem that catalogd will use for file based caching")
 	flag.BoolVar(&catalogdVersion, "version", false, "print the catalogd version and exit")
 	flag.DurationVar(&gcInterval, "gc-interval", 12*time.Hour, "interval in which garbage collection should be run against the catalog content cache")
 	flag.StringVar(&certFile, "tls-cert", "", "The certificate file used for serving catalog contents over HTTPS. Requires tls-key.")
 	flag.StringVar(&keyFile, "tls-key", "", "The key file used for serving catalog contents over HTTPS. Requires tls-cert.")
 	flag.IntVar(&webhookPort, "webhook-server-port", 9443, "The port that the mutating webhook server serves at.")
-	flag.StringVar(&caCertDir, "ca-certs-dir", "", "The directory of CA certificate to use for verifying HTTPS connections to image registries.")
+	flag.StringVar(&caCertDir, "ca-certs-dir", "", "The directory of TLS certificate to use for verifying HTTPS connections to the Catalogd and docker-registry web servers.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -178,17 +178,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	unpackCacheBasePath := filepath.Join(cacheDir, source.UnpackCacheDir)
-	if err := os.MkdirAll(unpackCacheBasePath, 0770); err != nil {
-		setupLog.Error(err, "unable to create cache directory for unpacking")
+	certPool, err := httputil.NewCertPool(caCertDir, ctrl.Log.WithName("cert-pool"))
+	if err != nil {
+		setupLog.Error(err, "unable to create CA certificate pool")
 		os.Exit(1)
 	}
-	unpacker := &source.ContainersImageRegistry{
-		BaseCachePath: unpackCacheBasePath,
-		SourceContext: &types.SystemContext{
-			OCICertPath:    caCertDir,
-			DockerCertPath: caCertDir,
-		},
+
+	unpacker, err := source.NewDefaultUnpacker(systemNamespace, cacheDir, certPool)
+	if err != nil {
+		setupLog.Error(err, "unable to create unpacker")
+		os.Exit(1)
 	}
 
 	var localStorage storage.Instance
@@ -222,17 +221,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	clusterCatalogFinalizers, err := corecontrollers.NewFinalizers(localStorage, unpacker)
-	if err != nil {
-		setupLog.Error(err, "unable to configure finalizers")
-		os.Exit(1)
-	}
-
 	if err = (&corecontrollers.ClusterCatalogReconciler{
-		Client:     mgr.GetClient(),
-		Unpacker:   unpacker,
-		Storage:    localStorage,
-		Finalizers: clusterCatalogFinalizers,
+		Client:   mgr.GetClient(),
+		Unpacker: unpacker,
+		Storage:  localStorage,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ClusterCatalog")
 		os.Exit(1)
@@ -256,7 +248,7 @@ func main() {
 
 	ctx := ctrl.SetupSignalHandler()
 	gc := &garbagecollection.GarbageCollector{
-		CachePath:      unpackCacheBasePath,
+		CachePath:      filepath.Join(cacheDir, source.UnpackCacheDir),
 		Logger:         ctrl.Log.WithName("garbage-collector"),
 		MetadataClient: metaClient,
 		Interval:       gcInterval,

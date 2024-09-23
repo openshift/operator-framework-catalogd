@@ -9,7 +9,6 @@ aliases:
    - stevekuznetsov
    - m1kola
    - everettraven
-   - tmshort
 
    # Contributors who can review/lgtm any PRs in the repo
    catalogd-reviewers:

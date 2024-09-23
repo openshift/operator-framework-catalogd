@@ -1,0 +1,115 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: catalogd
+    app.kubernetes.io/part-of: olm
+  name: catalogd-controller-manager
+  namespace: openshift-catalogd
+spec:
+  minReadySeconds: 5
+  replicas: 1
+  selector:
+    matchLabels:
+      control-plane: catalogd-controller-manager
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+        target.workload.openshift.io/management: '{"effect": "PreferredDuringScheduling"}'
+        openshift.io/required-scc: restricted-v2
+      labels:
+        control-plane: catalogd-controller-manager
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+                      - arm64
+                      - ppc64le
+                      - s390x
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                      - linux
+      containers:
+        - args:
+            - --secure-listen-address=0.0.0.0:8443
+            - --http2-disable
+            - --upstream=http://127.0.0.1:8080/
+            - --logtostderr=true
+            - --v=0
+          image: ${KUBE_RBAC_PROXY_IMAGE}
+          name: kube-rbac-proxy
+          ports:
+            - containerPort: 8443
+              name: https
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 5m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          terminationMessagePolicy: FallbackToLogsOnError
+        - args:
+            - --leader-elect
+            - --metrics-bind-address=127.0.0.1:8080
+            - --external-address=catalogd-catalogserver.openshift-catalogd.svc
+            - --tls-cert=/var/certs/tls.crt
+            - --tls-key=/var/certs/tls.key
+          command:
+            - ./manager
+          image: ${CATALOGD_IMAGE}
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          name: manager
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 200Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          terminationMessagePolicy: FallbackToLogsOnError
+          volumeMounts:
+            - mountPath: /var/cache/
+              name: cache
+            - mountPath: /var/certs
+              name: catalogserver-certs
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: catalogd-controller-manager
+      terminationGracePeriodSeconds: 10
+      volumes:
+        - emptyDir: {}
+          name: cache
+        - name: catalogserver-certs
+          secret:
+            optional: false
+            secretName: catalogserver-cert
+      priorityClassName: system-cluster-critical

@@ -34,14 +34,15 @@ func (s LocalDir) Store(ctx context.Context, catalog string, fsys fs.FS) error {
 		return err
 	}
 	defer os.Remove(tempFile.Name())
-	if err := declcfg.WalkMetasFS(ctx, fsys, func(path string, meta *declcfg.Meta, err error) error {
+	err = declcfg.WalkMetasFS(ctx, fsys, func(path string, meta *declcfg.Meta, err error) error {
 		if err != nil {
-			return err
+			return fmt.Errorf("error in parsing catalog content files in the filesystem: %w", err)
 		}
 		_, err = tempFile.Write(meta.Blob)
 		return err
-	}); err != nil {
-		return fmt.Errorf("error walking FBC root: %w", err)
+	})
+	if err != nil {
+		return err
 	}
 	fbcFile := filepath.Join(fbcDir, "all.json")
 	return os.Rename(tempFile.Name(), fbcFile)

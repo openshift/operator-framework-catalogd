@@ -22,17 +22,19 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apimacherrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/wait"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	crfinalizer "sigs.k8s.io/controller-runtime/pkg/finalizer"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/operator-framework/catalogd/api/core/v1alpha1"
+	catalogderrors "github.com/operator-framework/catalogd/internal/errors"
 	"github.com/operator-framework/catalogd/internal/source"
 	"github.com/operator-framework/catalogd/internal/storage"
 )
@@ -47,14 +49,16 @@ const (
 // ClusterCatalogReconciler reconciles a Catalog object
 type ClusterCatalogReconciler struct {
 	client.Client
-	Unpacker   source.Unpacker
-	Storage    storage.Instance
-	Finalizers crfinalizer.Finalizers
+	Unpacker source.Unpacker
+	Storage  storage.Instance
 }
 
 //+kubebuilder:rbac:groups=olm.operatorframework.io,resources=clustercatalogs,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=olm.operatorframework.io,resources=clustercatalogs/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=olm.operatorframework.io,resources=clustercatalogs/finalizers,verbs=update
+//+kubebuilder:rbac:groups=core,resources=pods,verbs=create;update;patch;delete;get;list;watch
+//+kubebuilder:rbac:groups=core,resources=pods/log,verbs=get;list;watch
+//+kubebuilder:rbac:groups=core,namespace=system,resources=secrets,verbs=get;
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -62,11 +66,8 @@ type ClusterCatalogReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.0/pkg/reconcile
 func (r *ClusterCatalogReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	l := log.FromContext(ctx).WithName("catalogd-controller")
-	ctx = log.IntoContext(ctx, l)
-
-	l.V(1).Info("reconcile starting")
-	defer l.V(1).Info("reconcile ending")
+	// TODO: Where and when should we be logging errors and at which level?
+	_ = log.FromContext(ctx).WithName("catalogd-controller")
 
 	existingCatsrc := v1alpha1.ClusterCatalog{}
 	if err := r.Client.Get(ctx, req.NamespacedName, &existingCatsrc); err != nil {
@@ -75,35 +76,28 @@ func (r *ClusterCatalogReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	reconciledCatsrc := existingCatsrc.DeepCopy()
 	res, reconcileErr := r.reconcile(ctx, reconciledCatsrc)
 
-	// Do checks before any Update()s, as Update() may modify the resource structure!
-	updateStatus := !equality.Semantic.DeepEqual(existingCatsrc.Status, reconciledCatsrc.Status)
-	updateFinalizers := !equality.Semantic.DeepEqual(existingCatsrc.Finalizers, reconciledCatsrc.Finalizers)
-	unexpectedFieldsChanged := checkForUnexpectedFieldChange(existingCatsrc, *reconciledCatsrc)
-
-	if unexpectedFieldsChanged {
-		panic("spec or metadata changed by reconciler")
+	var unrecov *catalogderrors.Unrecoverable
+	if errors.As(reconcileErr, &unrecov) {
+		reconcileErr = nil
 	}
 
-	// Save the finalizers off to the side. If we update the status, the reconciledCatsrc will be updated
-	// to contain the new state of the ClusterCatalog, which contains the status update, but (critically)
-	// does not contain the finalizers. After the status update, we need to re-add the finalizers to the
-	// reconciledCatsrc before updating the object.
-	finalizers := reconciledCatsrc.Finalizers
-
-	if updateStatus {
-		if err := r.Client.Status().Update(ctx, reconciledCatsrc); err != nil {
-			reconcileErr = errors.Join(reconcileErr, fmt.Errorf("error updating status: %v", err))
+	// Update the status subresource before updating the main object. This is
+	// necessary because, in many cases, the main object update will remove the
+	// finalizer, which will cause the core Kubernetes deletion logic to
+	// complete. Therefore, we need to make the status update prior to the main
+	// object update to ensure that the status update can be processed before
+	// a potential deletion.
+	if !equality.Semantic.DeepEqual(existingCatsrc.Status, reconciledCatsrc.Status) {
+		if updateErr := r.Client.Status().Update(ctx, reconciledCatsrc); updateErr != nil {
+			return res, apimacherrors.NewAggregate([]error{reconcileErr, updateErr})
 		}
 	}
-
-	reconciledCatsrc.Finalizers = finalizers
-
-	if updateFinalizers {
-		if err := r.Client.Update(ctx, reconciledCatsrc); err != nil {
-			reconcileErr = errors.Join(reconcileErr, fmt.Errorf("error updating finalizers: %v", err))
+	existingCatsrc.Status, reconciledCatsrc.Status = v1alpha1.ClusterCatalogStatus{}, v1alpha1.ClusterCatalogStatus{}
+	if !equality.Semantic.DeepEqual(existingCatsrc, reconciledCatsrc) {
+		if updateErr := r.Client.Update(ctx, reconciledCatsrc); updateErr != nil {
+			return res, apimacherrors.NewAggregate([]error{reconcileErr, updateErr})
 		}
 	}
-
 	return res, reconcileErr
 }
 
@@ -111,6 +105,7 @@ func (r *ClusterCatalogReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 func (r *ClusterCatalogReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.ClusterCatalog{}).
+		Owns(&corev1.Pod{}).
 		Complete(r)
 }
 
@@ -123,13 +118,18 @@ func (r *ClusterCatalogReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // linting from the linter that was fussing about this.
 // nolint:unparam
 func (r *ClusterCatalogReconciler) reconcile(ctx context.Context, catalog *v1alpha1.ClusterCatalog) (ctrl.Result, error) {
-	finalizeResult, err := r.Finalizers.Finalize(ctx, catalog)
-	if err != nil {
-		return ctrl.Result{}, err
+	if catalog.DeletionTimestamp.IsZero() && !controllerutil.ContainsFinalizer(catalog, fbcDeletionFinalizer) {
+		controllerutil.AddFinalizer(catalog, fbcDeletionFinalizer)
+		return ctrl.Result{}, nil
 	}
-	if finalizeResult.Updated || finalizeResult.StatusUpdated {
-		// On create: make sure the finalizer is applied before we do anything
-		// On delete: make sure we do nothing after the finalizer is removed
+	if !catalog.DeletionTimestamp.IsZero() {
+		if err := r.Storage.Delete(catalog.Name); err != nil {
+			return ctrl.Result{}, updateStatusStorageDeleteError(&catalog.Status, err)
+		}
+		if err := r.Unpacker.Cleanup(ctx, catalog); err != nil {
+			return ctrl.Result{}, updateStatusStorageDeleteError(&catalog.Status, err)
+		}
+		controllerutil.RemoveFinalizer(catalog, fbcDeletionFinalizer)
 		return ctrl.Result{}, nil
 	}
 
@@ -139,12 +139,16 @@ func (r *ClusterCatalogReconciler) reconcile(ctx context.Context, catalog *v1alp
 
 	unpackResult, err := r.Unpacker.Unpack(ctx, catalog)
 	if err != nil {
-		unpackErr := fmt.Errorf("source bundle content: %w", err)
-		updateStatusProgressing(catalog, unpackErr)
-		return ctrl.Result{}, unpackErr
+		return ctrl.Result{}, updateStatusUnpackFailing(&catalog.Status, fmt.Errorf("source bundle content: %v", err))
 	}
 
 	switch unpackResult.State {
+	case source.StatePending:
+		updateStatusUnpackPending(&catalog.Status, unpackResult)
+		return ctrl.Result{}, nil
+	case source.StateUnpacking:
+		updateStatusUnpacking(&catalog.Status, unpackResult)
+		return ctrl.Result{}, nil
 	case source.StateUnpacked:
 		contentURL := ""
 		// TODO: We should check to see if the unpacked result has the same content
@@ -152,9 +156,7 @@ func (r *ClusterCatalogReconciler) reconcile(ctx context.Context, catalog *v1alp
 		//   of the unpacking steps.
 		err := r.Storage.Store(ctx, catalog.Name, unpackResult.FS)
 		if err != nil {
-			storageErr := fmt.Errorf("error storing fbc: %v", err)
-			updateStatusProgressing(catalog, storageErr)
-			return ctrl.Result{}, storageErr
+			return ctrl.Result{}, updateStatusStorageError(&catalog.Status, fmt.Errorf("error storing fbc: %v", err))
 		}
 		contentURL = r.Storage.ContentURL(catalog.Name)
 
@@ -162,10 +164,11 @@ func (r *ClusterCatalogReconciler) reconcile(ctx context.Context, catalog *v1alp
 
 		if unpackResult != nil && unpackResult.ResolvedSource != nil && unpackResult.ResolvedSource.Image != nil {
 			lastUnpacked = unpackResult.ResolvedSource.Image.LastUnpacked
+		} else {
+			lastUnpacked = metav1.Time{}
 		}
 
-		updateStatusProgressing(catalog, nil)
-		updateStatusServing(&catalog.Status, unpackResult, contentURL, catalog.Generation, lastUnpacked)
+		updateStatusUnpacked(&catalog.Status, unpackResult, contentURL, catalog.Generation, lastUnpacked)
 
 		var requeueAfter time.Duration
 		switch catalog.Spec.Source.Type {
@@ -177,54 +180,73 @@ func (r *ClusterCatalogReconciler) reconcile(ctx context.Context, catalog *v1alp
 
 		return ctrl.Result{RequeueAfter: requeueAfter}, nil
 	default:
-		panic(fmt.Sprintf("unknown unpack state %q", unpackResult.State))
+		return ctrl.Result{}, updateStatusUnpackFailing(&catalog.Status, fmt.Errorf("unknown unpack state %q: %v", unpackResult.State, err))
 	}
 }
 
-func updateStatusProgressing(catalog *v1alpha1.ClusterCatalog, err error) {
-	progressingCond := metav1.Condition{
-		Type:    v1alpha1.TypeProgressing,
+func updateStatusUnpackPending(status *v1alpha1.ClusterCatalogStatus, result *source.Result) {
+	status.ResolvedSource = nil
+	meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+		Type:    v1alpha1.TypeUnpacked,
 		Status:  metav1.ConditionFalse,
-		Reason:  v1alpha1.ReasonSucceeded,
-		Message: "Successfully unpacked and stored content from resolved source",
-	}
-
-	if err != nil {
-		progressingCond.Status = metav1.ConditionTrue
-		progressingCond.Reason = v1alpha1.ReasonRetrying
-		progressingCond.Message = err.Error()
-	}
-
-	if errors.Is(err, reconcile.TerminalError(nil)) {
-		progressingCond.Status = metav1.ConditionFalse
-		progressingCond.Reason = v1alpha1.ReasonTerminal
-	}
-
-	meta.SetStatusCondition(&catalog.Status.Conditions, progressingCond)
+		Reason:  v1alpha1.ReasonUnpackPending,
+		Message: result.Message,
+	})
 }
-func updateStatusServing(status *v1alpha1.ClusterCatalogStatus, result *source.Result, contentURL string, generation int64, unpackedAt metav1.Time) {
+
+func updateStatusUnpacking(status *v1alpha1.ClusterCatalogStatus, result *source.Result) {
+	status.ResolvedSource = nil
+	meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+		Type:    v1alpha1.TypeUnpacked,
+		Status:  metav1.ConditionFalse,
+		Reason:  v1alpha1.ReasonUnpacking,
+		Message: result.Message,
+	})
+}
+
+func updateStatusUnpacked(status *v1alpha1.ClusterCatalogStatus, result *source.Result, contentURL string, generation int64, lastUnpacked metav1.Time) {
 	status.ResolvedSource = result.ResolvedSource
 	status.ContentURL = contentURL
 	status.ObservedGeneration = generation
-	status.LastUnpacked = unpackedAt
+	status.LastUnpacked = lastUnpacked
 	meta.SetStatusCondition(&status.Conditions, metav1.Condition{
-		Type:    v1alpha1.TypeServing,
+		Type:    v1alpha1.TypeUnpacked,
 		Status:  metav1.ConditionTrue,
-		Reason:  v1alpha1.ReasonAvailable,
-		Message: "Serving desired content from resolved source",
+		Reason:  v1alpha1.ReasonUnpackSuccessful,
+		Message: result.Message,
 	})
 }
 
-func updateStatusNotServing(status *v1alpha1.ClusterCatalogStatus) {
+func updateStatusUnpackFailing(status *v1alpha1.ClusterCatalogStatus, err error) error {
 	status.ResolvedSource = nil
-	status.ContentURL = ""
-	status.ObservedGeneration = 0
-	status.LastUnpacked = metav1.Time{}
 	meta.SetStatusCondition(&status.Conditions, metav1.Condition{
-		Type:   v1alpha1.TypeServing,
-		Status: metav1.ConditionFalse,
-		Reason: v1alpha1.ReasonUnavailable,
+		Type:    v1alpha1.TypeUnpacked,
+		Status:  metav1.ConditionFalse,
+		Reason:  v1alpha1.ReasonUnpackFailed,
+		Message: err.Error(),
 	})
+	return err
+}
+
+func updateStatusStorageError(status *v1alpha1.ClusterCatalogStatus, err error) error {
+	status.ResolvedSource = nil
+	meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+		Type:    v1alpha1.TypeUnpacked,
+		Status:  metav1.ConditionFalse,
+		Reason:  v1alpha1.ReasonStorageFailed,
+		Message: fmt.Sprintf("failed to store bundle: %s", err.Error()),
+	})
+	return err
+}
+
+func updateStatusStorageDeleteError(status *v1alpha1.ClusterCatalogStatus, err error) error {
+	meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+		Type:    v1alpha1.TypeDelete,
+		Status:  metav1.ConditionFalse,
+		Reason:  v1alpha1.ReasonStorageDeleteFailed,
+		Message: fmt.Sprintf("failed to delete storage: %s", err.Error()),
+	})
+	return err
 }
 
 func (r *ClusterCatalogReconciler) needsUnpacking(catalog *v1alpha1.ClusterCatalog) bool {
@@ -257,41 +279,4 @@ func (r *ClusterCatalogReconciler) needsUnpacking(catalog *v1alpha1.ClusterCatal
 	}
 	// time to unpack
 	return true
-}
-
-// Compare resources - ignoring status & metadata.finalizers
-func checkForUnexpectedFieldChange(a, b v1alpha1.ClusterCatalog) bool {
-	a.Status, b.Status = v1alpha1.ClusterCatalogStatus{}, v1alpha1.ClusterCatalogStatus{}
-	a.Finalizers, b.Finalizers = []string{}, []string{}
-	return !equality.Semantic.DeepEqual(a, b)
-}
-
-type finalizerFunc func(ctx context.Context, obj client.Object) (crfinalizer.Result, error)
-
-func (f finalizerFunc) Finalize(ctx context.Context, obj client.Object) (crfinalizer.Result, error) {
-	return f(ctx, obj)
-}
-
-func NewFinalizers(localStorage storage.Instance, unpacker source.Unpacker) (crfinalizer.Finalizers, error) {
-	f := crfinalizer.NewFinalizers()
-	err := f.Register(fbcDeletionFinalizer, finalizerFunc(func(ctx context.Context, obj client.Object) (crfinalizer.Result, error) {
-		catalog, ok := obj.(*v1alpha1.ClusterCatalog)
-		if !ok {
-			panic("could not convert object to clusterCatalog")
-		}
-		if err := localStorage.Delete(catalog.Name); err != nil {
-			updateStatusProgressing(catalog, err)
-			return crfinalizer.Result{StatusUpdated: true}, err
-		}
-		updateStatusNotServing(&catalog.Status)
-		if err := unpacker.Cleanup(ctx, catalog); err != nil {
-			updateStatusProgressing(catalog, err)
-			return crfinalizer.Result{StatusUpdated: true}, err
-		}
-		return crfinalizer.Result{StatusUpdated: true}, nil
-	}))
-	if err != nil {
-		return f, err
-	}
-	return f, nil
 }

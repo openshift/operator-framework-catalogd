@@ -29,7 +29,7 @@ IMAGE_MAPPINGS[manager]='${CATALOGD_IMAGE}'
 #  - --flagname=two
 declare -A FLAG_MAPPINGS
 # shellcheck disable=SC2016
-FLAG_MAPPINGS[external-address]="catalogd-service.${NAMESPACE}.svc"
+FLAG_MAPPINGS[external-address]='catalogd-catalogserver.openshift-catalogd.svc'
 
 ##################################################
 # You shouldn't need to change anything below here
@@ -47,12 +47,11 @@ TMP_ROOT="$(mktemp -p . -d 2>/dev/null || mktemp -d ./tmpdir.XXXXXXX)"
 trap 'rm -rf $TMP_ROOT' EXIT
 
 # Copy all kustomize files into a temp dir
-cp -a "${REPO_ROOT}/config" "${TMP_ROOT}/config"
-mkdir -p "${TMP_ROOT}/openshift"
-cp -a "${REPO_ROOT}/openshift/kustomize" "${TMP_ROOT}/openshift/kustomize"
+TMP_CONFIG="${TMP_ROOT}/config"
+cp -a "${REPO_ROOT}/config" "$TMP_CONFIG"
 
-# Override OPENSHIFT-NAMESPACE to ${NAMESPACE}
-find "${TMP_ROOT}" -name "*.yaml" -exec sed -i "s/OPENSHIFT-NAMESPACE/${NAMESPACE}/g" {} \;
+# Override namespace to openshift-catalogd
+$YQ -i ".namespace = \"${NAMESPACE}\"" "${TMP_CONFIG}/base/default/kustomization.yaml"
 
 # Create a temp dir for manifests
 TMP_MANIFEST_DIR="${TMP_ROOT}/manifests"
@@ -60,7 +59,7 @@ mkdir -p "$TMP_MANIFEST_DIR"
 
 # Run kustomize, which emits a single yaml file
 TMP_KUSTOMIZE_OUTPUT="${TMP_MANIFEST_DIR}/temp.yaml"
-$KUSTOMIZE build "${TMP_ROOT}/openshift/kustomize/overlays/openshift" -o "$TMP_KUSTOMIZE_OUTPUT"
+$KUSTOMIZE build "${REPO_ROOT}"/openshift/kustomize/overlays/openshift -o "$TMP_KUSTOMIZE_OUTPUT"
 
 for container_name in "${!IMAGE_MAPPINGS[@]}"; do
   placeholder="${IMAGE_MAPPINGS[$container_name]}"
