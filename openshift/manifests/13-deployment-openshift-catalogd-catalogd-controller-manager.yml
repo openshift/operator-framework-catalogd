@@ -98,6 +98,9 @@ spec:
               name: cache
             - mountPath: /var/certs
               name: catalogserver-certs
+            - mountPath: /etc/catalogd/auth.json
+              name: global-auth-file
+              readOnly: true
       securityContext:
         runAsNonRoot: true
         seccompProfile:
@@ -111,4 +114,8 @@ spec:
           secret:
             optional: false
             secretName: catalogserver-cert
+        - hostPath:
+            path: /var/lib/kubelet/config.json
+            type: File
+          name: global-auth-file
       priorityClassName: system-cluster-critical
