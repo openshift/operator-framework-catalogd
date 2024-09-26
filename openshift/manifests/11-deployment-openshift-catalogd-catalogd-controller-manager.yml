@@ -102,6 +102,9 @@ spec:
             - mountPath: /etc/containers
               name: etc-containers
               readOnly: true
+            - mountPath: /etc/catalogd/auth.json
+              name: global-auth-file
+              readOnly: true
       securityContext:
         runAsNonRoot: true
         seccompProfile:
@@ -119,4 +122,8 @@ spec:
             path: /etc/containers
             type: Directory
           name: etc-containers
+        - hostPath:
+            path: /var/lib/kubelet/config.json
+            type: File
+          name: global-auth-file
       priorityClassName: system-cluster-critical
