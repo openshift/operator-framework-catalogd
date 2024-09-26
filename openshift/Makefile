@@ -14,3 +14,7 @@ manifests: $(KUSTOMIZE) $(YQ)
 .PHONY: verify-manifests
 verify-manifests: manifests
 	git diff --exit-code
+
+.PHONY: test-e2e
+test-e2e: ## Run the e2e tests
+	$(MAKE) test-e2e -C $(DIR)/../
