@@ -45,6 +45,7 @@ spec:
             - --http2-disable
             - --upstream=http://127.0.0.1:8080/
             - --logtostderr=true
+            - --v=${LOG_VERBOSITY}
           image: ${KUBE_RBAC_PROXY_IMAGE}
           name: kube-rbac-proxy
           ports:
@@ -67,6 +68,7 @@ spec:
             - --external-address=catalogd-service.openshift-catalogd.svc
             - --tls-cert=/var/certs/tls.crt
             - --tls-key=/var/certs/tls.key
+            - --v=${LOG_VERBOSITY}
             - --global-pull-secret=openshift-config/pull-secret
           command:
             - ./manager
