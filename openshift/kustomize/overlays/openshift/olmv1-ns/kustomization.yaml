@@ -1,0 +1,21 @@
+# Adds namespace to all resources.
+namespace: OPENSHIFT-NAMESPACE
+
+resources:
+- ../../../../../config/base/crd
+- ../../../../../config/base/rbac
+- ../../../../../config/base/manager
+
+patches:
+- target:
+    kind: Service
+    name: service
+  path: patches/manager_service.yaml
+- target:
+    kind: MutatingWebhookConfiguration
+    name: mutating-webhook-configuration
+  path: patches/mutating_webhook_config.yaml
+- target:
+    kind: Deployment
+    name: controller-manager
+  path: patches/manager_deployment_certs.yaml
