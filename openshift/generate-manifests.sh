@@ -27,9 +27,12 @@ IMAGE_MAPPINGS[manager]='${CATALOGD_IMAGE}'
 # and an entry to the FLAG_MAPPINGS of FLAG_MAPPINGS[flagname]='two', the argument will be updated to:
 # args:
 #  - --flagname=two
+#
+# If the flag doesn't already exist - it will be appended to the list.
 declare -A FLAG_MAPPINGS
 # shellcheck disable=SC2016
 FLAG_MAPPINGS[external-address]='catalogd-catalogserver.openshift-catalogd.svc'
+FLAG_MAPPINGS[global-pull-secret]="openshift-config/pull-secret"
 
 ##################################################
 # You shouldn't need to change anything below here
@@ -47,11 +50,12 @@ TMP_ROOT="$(mktemp -p . -d 2>/dev/null || mktemp -d ./tmpdir.XXXXXXX)"
 trap 'rm -rf $TMP_ROOT' EXIT
 
 # Copy all kustomize files into a temp dir
-TMP_CONFIG="${TMP_ROOT}/config"
-cp -a "${REPO_ROOT}/config" "$TMP_CONFIG"
+cp -a "${REPO_ROOT}/config" "${TMP_ROOT}/config"
+mkdir -p "${TMP_ROOT}/openshift"
+cp -a "${REPO_ROOT}/openshift/kustomize" "${TMP_ROOT}/openshift/kustomize"
 
-# Override namespace to openshift-catalogd
-$YQ -i ".namespace = \"${NAMESPACE}\"" "${TMP_CONFIG}/base/default/kustomization.yaml"
+# Override OPENSHIFT-NAMESPACE to ${NAMESPACE}
+find "${TMP_ROOT}" -name "*.yaml" -exec sed -i "s/OPENSHIFT-NAMESPACE/${NAMESPACE}/g" {} \;
 
 # Create a temp dir for manifests
 TMP_MANIFEST_DIR="${TMP_ROOT}/manifests"
@@ -59,7 +63,7 @@ mkdir -p "$TMP_MANIFEST_DIR"
 
 # Run kustomize, which emits a single yaml file
 TMP_KUSTOMIZE_OUTPUT="${TMP_MANIFEST_DIR}/temp.yaml"
-$KUSTOMIZE build "${REPO_ROOT}"/openshift/kustomize/overlays/openshift -o "$TMP_KUSTOMIZE_OUTPUT"
+$KUSTOMIZE build "${TMP_ROOT}"/openshift/kustomize/overlays/openshift -o "$TMP_KUSTOMIZE_OUTPUT"
 
 for container_name in "${!IMAGE_MAPPINGS[@]}"; do
   placeholder="${IMAGE_MAPPINGS[$container_name]}"
@@ -73,7 +77,12 @@ done
 # Loop through any flag updates that need to be made to the manager container
 for flag_name in "${!FLAG_MAPPINGS[@]}"; do
   flagval="${FLAG_MAPPINGS[$flag_name]}"
+
+  # First, update the flag if it exists
   $YQ -i "(select(.kind == \"Deployment\") | .spec.template.spec.containers[] | select(.name == \"manager\") | .args[] | select(. | contains(\"--$flag_name=\")) | .) = \"--$flag_name=$flagval\"" "$TMP_KUSTOMIZE_OUTPUT"
+
+  # Then, append the flag if it doesn't exist
+  $YQ -i "(select(.kind == \"Deployment\") | .spec.template.spec.containers[] | select(.name == \"manager\") | .args) |= (select(.[] | contains(\"--$flag_name=\")) | .) // . + [\"--$flag_name=$flagval\"]" "$TMP_KUSTOMIZE_OUTPUT"
 done
 
 # Use yq to split the single yaml file into 1 per document.
