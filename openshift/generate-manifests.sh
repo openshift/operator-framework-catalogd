@@ -4,6 +4,8 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+# THIS IS JUST A COMMENT, NOTHING MORE
+
 ##################################################
 # Modify these as needed
 ##################################################
