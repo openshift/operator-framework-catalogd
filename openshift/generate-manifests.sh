@@ -27,9 +27,12 @@ IMAGE_MAPPINGS[manager]='${CATALOGD_IMAGE}'
 # and an entry to the FLAG_MAPPINGS of FLAG_MAPPINGS[flagname]='two', the argument will be updated to:
 # args:
 #  - --flagname=two
+#
+# If the flag doesn't already exist - it will be appended to the list.
 declare -A FLAG_MAPPINGS
 # shellcheck disable=SC2016
 FLAG_MAPPINGS[external-address]="catalogd-service.${NAMESPACE}.svc"
+FLAG_MAPPINGS[global-pull-secret]="openshift-config/pull-secret"
 
 ##################################################
 # You shouldn't need to change anything below here
@@ -74,7 +77,12 @@ done
 # Loop through any flag updates that need to be made to the manager container
 for flag_name in "${!FLAG_MAPPINGS[@]}"; do
   flagval="${FLAG_MAPPINGS[$flag_name]}"
+
+  # First, update the flag if it exists
   $YQ -i "(select(.kind == \"Deployment\") | .spec.template.spec.containers[] | select(.name == \"manager\") | .args[] | select(. | contains(\"--$flag_name=\")) | .) = \"--$flag_name=$flagval\"" "$TMP_KUSTOMIZE_OUTPUT"
+
+  # Then, append the flag if it doesn't exist
+  $YQ -i "(select(.kind == \"Deployment\") | .spec.template.spec.containers[] | select(.name == \"manager\") | .args) |= (select(.[] | contains(\"--$flag_name=\")) | .) // . + [\"--$flag_name=$flagval\"]" "$TMP_KUSTOMIZE_OUTPUT"
 done
 
 # Use yq to split the single yaml file into 1 per document.
