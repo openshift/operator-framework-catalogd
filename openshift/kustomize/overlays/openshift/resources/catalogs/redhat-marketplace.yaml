@@ -1,0 +1,10 @@
+apiVersion: olm.operatorframework.io/v1alpha1
+kind: ClusterCatalog
+metadata:
+  name: redhat-marketplace
+spec:
+  source:
+    type: Image
+    image:
+      pollInterval: 10m
+      ref: registry.redhat.io/redhat/redhat-marketplace-index:v4.18
