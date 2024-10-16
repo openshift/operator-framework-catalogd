@@ -6,6 +6,6 @@ metadata:
 spec:
   source:
     image:
-      pollInterval: 10m
+      pollInterval: 10m0s
       ref: registry.redhat.io/redhat/certified-operator-index:v4.18
     type: Image

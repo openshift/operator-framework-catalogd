@@ -6,5 +6,5 @@ spec:
   source:
     type: Image
     image:
-      pollInterval: 10m
+      pollInterval: 10m0s
       ref: registry.redhat.io/redhat/redhat-marketplace-index:v4.18
