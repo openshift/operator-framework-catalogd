@@ -1,0 +1,7 @@
+namePrefix: openshift-
+
+resources:
+  - certified-operators.yaml
+  - community-operators.yaml
+  - redhat-operators.yaml
+  - redhat-marketplace.yaml
