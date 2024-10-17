@@ -3,3 +3,4 @@ namePrefix: catalogd-
 resources:
 - olmv1-ns
 - openshift-config
+- catalogs
