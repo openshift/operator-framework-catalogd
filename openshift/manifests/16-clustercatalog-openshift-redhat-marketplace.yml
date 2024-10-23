@@ -2,10 +2,10 @@
 apiVersion: olm.operatorframework.io/v1alpha1
 kind: ClusterCatalog
 metadata:
-  name: catalogd-openshift-certified-operators
+  name: openshift-redhat-marketplace
 spec:
   source:
     image:
       pollInterval: 10m0s
-      ref: registry.redhat.io/redhat/certified-operator-index:v4.18
+      ref: registry.redhat.io/redhat/redhat-marketplace-index:v4.18
     type: Image
