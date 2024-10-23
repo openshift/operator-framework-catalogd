@@ -1,6 +1,8 @@
 # Adds namespace to all resources.
 namespace: OPENSHIFT-NAMESPACE
 
+namePrefix: catalogd-
+
 resources:
 - ../../../../../config/base/crd
 - ../../../../../config/base/rbac
