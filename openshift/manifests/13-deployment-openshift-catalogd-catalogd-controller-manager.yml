@@ -46,6 +46,7 @@ spec:
             - --external-address=catalogd-service.openshift-catalogd.svc
             - --tls-cert=/var/certs/tls.crt
             - --tls-key=/var/certs/tls.key
+            - --ca-certs-dir=/run/secrets/kubernetes.io/serviceaccount
             - --v=${LOG_VERBOSITY}
             - --global-pull-secret=openshift-config/pull-secret
           command:
