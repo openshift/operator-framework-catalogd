@@ -3,6 +3,7 @@ kind: ClusterCatalog
 metadata:
   name: openshift-certified-operators
 spec:
+  priority: -200
   source:
     type: Image
     image:
