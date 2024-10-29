@@ -3,6 +3,7 @@ kind: ClusterCatalog
 metadata:
   name: openshift-redhat-marketplace
 spec:
+  priority: -300
   source:
     type: Image
     image:
