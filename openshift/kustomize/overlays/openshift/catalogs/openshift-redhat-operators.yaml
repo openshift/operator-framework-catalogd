@@ -3,6 +3,7 @@ kind: ClusterCatalog
 metadata:
   name: openshift-redhat-operators
 spec:
+  priority: -100
   source:
     type: Image
     image:
