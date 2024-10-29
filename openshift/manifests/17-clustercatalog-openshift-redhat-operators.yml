@@ -4,6 +4,7 @@ kind: ClusterCatalog
 metadata:
   name: openshift-redhat-operators
 spec:
+  priority: -100
   source:
     image:
       pollInterval: 10m0s
