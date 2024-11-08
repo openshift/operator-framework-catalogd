@@ -7,6 +7,6 @@ spec:
   priority: -300
   source:
     image:
-      pollInterval: 10m0s
+      pollIntervalMinutes: 10
       ref: registry.redhat.io/redhat/redhat-marketplace-index:v4.18
     type: Image
