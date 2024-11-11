@@ -7,5 +7,5 @@ spec:
   source:
     type: Image
     image:
-      pollInterval: 10m0s
+      pollIntervalMinutes: 10
       ref: registry.redhat.io/redhat/redhat-operator-index:v4.18
