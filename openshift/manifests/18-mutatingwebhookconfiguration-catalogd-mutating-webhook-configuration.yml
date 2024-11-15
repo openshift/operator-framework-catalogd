@@ -12,7 +12,7 @@ webhooks:
       service:
         name: catalogd-service
         namespace: openshift-catalogd
-        path: /mutate-olm-operatorframework-io-v1alpha1-clustercatalog
+        path: /mutate-olm-operatorframework-io-v1-clustercatalog
         port: 9443
     failurePolicy: Fail
     matchConditions:
@@ -23,7 +23,7 @@ webhooks:
       - apiGroups:
           - olm.operatorframework.io
         apiVersions:
-          - v1alpha1
+          - v1
         operations:
           - CREATE
           - UPDATE
