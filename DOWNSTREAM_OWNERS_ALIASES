@@ -10,6 +10,7 @@ aliases:
    - m1kola
    - everettraven
    - tmshort
+   - LalatenduMohanty
 
    # Contributors who can review/lgtm any PRs in the repo
    catalogd-reviewers:
@@ -25,3 +26,4 @@ aliases:
    - stevekuznetsov
    - tmshort
    - everettraven
+   - LalatenduMohanty
