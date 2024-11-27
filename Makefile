@@ -25,6 +25,14 @@ ifeq ($(shell [[ $$HOME == "" || $$HOME == "/" ]] && [[ $$XDG_DATA_HOME == "" ]]
 	SETUP_ENVTEST_BIN_DIR_OVERRIDE += --bin-dir /tmp/envtest-binaries
 endif
 
+ifneq (, $(shell command -v docker 2>/dev/null))
+CONTAINER_RUNTIME := docker
+else ifneq (, $(shell command -v podman 2>/dev/null))
+CONTAINER_RUNTIME := podman
+else
+$(warning Could not find docker or podman in path! This may result in targets requiring a container runtime failing!)
+endif
+
 # For standard development and release flows, we use the config/overlays/cert-manager overlay.
 KUSTOMIZE_OVERLAY := config/overlays/cert-manager
 
@@ -102,7 +110,7 @@ FOCUS := $(if $(TEST),-v -focus "$(TEST)")
 ifeq ($(origin E2E_FLAGS), undefined)
 E2E_FLAGS :=
 endif
-test-e2e: $(GINKGO) ## Run the e2e tests
+test-e2e: $(GINKGO) ## Run the e2e tests on existing cluster
 	$(GINKGO) $(E2E_FLAGS) -trace -vv $(FOCUS) test/e2e
 
 e2e: KIND_CLUSTER_NAME := catalogd-e2e
@@ -200,7 +208,7 @@ run: generate kind-cluster install ## Create a kind cluster and install a local 
 
 .PHONY: build-container
 build-container: build-linux ## Build docker image for catalogd.
-	docker build -f Dockerfile -t $(IMAGE) bin/linux
+	$(CONTAINER_RUNTIME) build -f Dockerfile -t $(IMAGE) ./bin/linux
 
 ##@ Deploy
 
@@ -214,12 +222,11 @@ kind-cluster-cleanup: $(KIND) ## Delete the kind cluster
 	$(KIND) delete cluster --name $(KIND_CLUSTER_NAME)
 
 .PHONY: kind-load
-kind-load: $(KIND) ## Load the built images onto the local cluster
-	$(KIND) export kubeconfig --name $(KIND_CLUSTER_NAME)
-	$(KIND) load docker-image $(IMAGE) --name $(KIND_CLUSTER_NAME)
+kind-load: check-cluster $(KIND) ## Load the built images onto the local cluster
+	$(CONTAINER_RUNTIME) save $(IMAGE) | $(KIND) load image-archive /dev/stdin --name $(KIND_CLUSTER_NAME)
 
 .PHONY: install
-install: build-container kind-load deploy wait ## Install local catalogd
+install: check-cluster build-container kind-load deploy wait ## Install local catalogd to an existing cluster
 
 .PHONY: deploy
 deploy: export MANIFEST="./catalogd.yaml"
@@ -267,3 +274,10 @@ quickstart: $(KUSTOMIZE) generate ## Generate the installation release manifests
 .PHONY: demo-update
 demo-update:
 	hack/scripts/generate-asciidemo.sh
+
+.PHONY: check-cluster
+check-cluster:
+	@kubectl config current-context >/dev/null 2>&1 || ( \
+		echo "Error: Could not get current Kubernetes context. Maybe use 'run' or 'e2e' targets first?"; \
+		exit 1; \
+	)
