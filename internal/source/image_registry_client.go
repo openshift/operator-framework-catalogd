@@ -18,6 +18,7 @@ import (
 	gcrkube "github.com/google/go-containerregistry/pkg/authn/kubernetes"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimacherrors "k8s.io/apimachinery/pkg/util/errors"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -29,9 +30,12 @@ import (
 // TODO: Make asynchronous
 
 type ImageRegistry struct {
-	BaseCachePath string
-	AuthNamespace string
+	BaseCachePath     string
+	AuthNamespace     string
+	PullSecretFetcher PullSecretFetcher
 }
+
+type PullSecretFetcher func(ctx context.Context) ([]corev1.Secret, error)
 
 const ConfigDirLabel = "operators.operatorframework.io.index.configs.v1"
 
@@ -87,6 +91,19 @@ func (i *ImageRegistry) Unpack(ctx context.Context, catalog *catalogdv1alpha1.Cl
 		}
 	}
 
+	if i.PullSecretFetcher != nil {
+		pullSecrets, err := i.PullSecretFetcher(ctx)
+		if err != nil {
+			l.V(1).Error(err, "failed to fetch global pullsecret, attempting unauthenticated image pull")
+		} else {
+			pullSecretAuth, err := gcrkube.NewFromPullSecrets(ctx, pullSecrets)
+			if err != nil {
+				l.V(1).Error(err, "failed to parse global pullsecret, attempting unauthenticated image pull")
+			} else {
+				remoteOpts = append(remoteOpts, remote.WithAuthFromKeychain(pullSecretAuth))
+			}
+		}
+	}
 	// always fetch the hash
 	imgDesc, err := remote.Head(imgRef, remoteOpts...)
 	if err != nil {

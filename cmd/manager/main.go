@@ -17,17 +17,24 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/pflag"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/metadata"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -75,6 +82,7 @@ func main() {
 		gcInterval           time.Duration
 		certFile             string
 		keyFile              string
+		globalPullSecret     string
 	)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -90,6 +98,7 @@ func main() {
 	flag.DurationVar(&gcInterval, "gc-interval", 12*time.Hour, "interval in which garbage collection should be run against the catalog content cache")
 	flag.StringVar(&certFile, "tls-cert", "", "The certificate file used for serving catalog contents over HTTPS. Requires tls-key.")
 	flag.StringVar(&keyFile, "tls-key", "", "The key file used for serving catalog contents over HTTPS. Requires tls-cert.")
+	flag.StringVar(&globalPullSecret, "global-pull-secret", "", "The <namespace>/<name> of the global pull secret that is going to be used to pull bundle images.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -134,6 +143,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	coreClient, err := corev1client.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		setupLog.Error(err, "unable to create core client")
+		os.Exit(1)
+	}
+	var globalPullSecretKey *k8stypes.NamespacedName
+	if globalPullSecret != "" {
+		secretParts := strings.Split(globalPullSecret, "/")
+		if len(secretParts) != 2 {
+			setupLog.Error(fmt.Errorf("incorrect number of components"), "value of global-pull-secret should be of the format <namespace>/<name>")
+			os.Exit(1)
+		}
+		globalPullSecretKey = &k8stypes.NamespacedName{Name: secretParts[1], Namespace: secretParts[0]}
+	}
+
 	if systemNamespace == "" {
 		systemNamespace = podNamespace()
 	}
@@ -143,12 +167,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	unpacker, err := source.NewDefaultUnpacker(systemNamespace, cacheDir)
-	if err != nil {
-		setupLog.Error(err, "unable to create unpacker")
+	unpackPath := path.Join(cacheDir, source.UnpackCacheDir)
+	if err := os.MkdirAll(unpackPath, 0700); err != nil {
+		setupLog.Error(fmt.Errorf("creating unpack cache directory: %w", err), "unable to create unpacker")
 		os.Exit(1)
 	}
 
+	unpacker := &source.ImageRegistry{
+		BaseCachePath: unpackPath,
+		AuthNamespace: systemNamespace,
+	}
+	if globalPullSecretKey != nil {
+		unpacker.PullSecretFetcher = func(ctx context.Context) ([]corev1.Secret, error) {
+			pullSecret, err := coreClient.Secrets(globalPullSecretKey.Namespace).Get(ctx, globalPullSecretKey.Name, metav1.GetOptions{})
+			if err != nil {
+				return nil, err
+			}
+			return []corev1.Secret{*pullSecret}, err
+		}
+	}
 	var localStorage storage.Instance
 	metrics.Registry.MustRegister(catalogdmetrics.RequestDurationMetric)
 
