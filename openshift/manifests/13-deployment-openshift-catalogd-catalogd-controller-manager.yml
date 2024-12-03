@@ -46,6 +46,7 @@ spec:
             - --upstream=http://127.0.0.1:8080/
             - --logtostderr=true
             - --v=${LOG_VERBOSITY}
+          env: {}
           image: ${KUBE_RBAC_PROXY_IMAGE}
           name: kube-rbac-proxy
           ports:
@@ -73,6 +74,7 @@ spec:
             - --global-pull-secret=openshift-config/pull-secret
           command:
             - ./manager
+          env: {}
           image: ${CATALOGD_IMAGE}
           imagePullPolicy: IfNotPresent
           livenessProbe:

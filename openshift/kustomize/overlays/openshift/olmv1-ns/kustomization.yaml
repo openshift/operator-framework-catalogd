@@ -38,3 +38,7 @@ patches:
     kind: Deployment
     name: controller-manager
   path: patches/manager_deployment_node_selection.yaml
+- target:
+    kind: Deployment
+    name: controller-manager
+  path: patches/manager_deployment_env.yaml
