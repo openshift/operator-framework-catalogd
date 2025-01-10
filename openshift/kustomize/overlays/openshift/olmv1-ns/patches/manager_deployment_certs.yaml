@@ -2,8 +2,14 @@
   path: /spec/template/spec/volumes/-
   value: {"name":"catalogserver-certs", "secret":{"optional":false,"secretName":"catalogserver-cert"}}
 - op: add
+  path: /spec/template/spec/volumes/-
+  value: {"name":"trusted-ca-bundle", "configMap":{"optional":false,"name":"trusted-ca-bundle"}}
+- op: add
   path: /spec/template/spec/containers/0/volumeMounts/-
   value: {"name":"catalogserver-certs", "mountPath":"/var/certs"}
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value: {"name":"trusted-ca-bundle", "mountPath":"/var/trusted-cas"}
 - op: add
   path: /spec/template/spec/containers/0/args/-
   value: "--tls-cert=/var/certs/tls.crt"
@@ -12,4 +18,4 @@
   value: "--tls-key=/var/certs/tls.key"
 - op: add
   path: /spec/template/spec/containers/0/args/-
-  value: "--ca-certs-dir=/run/secrets/kubernetes.io/serviceaccount"
+  value: "--ca-certs-dir=/var/trusted-cas"

@@ -46,7 +46,7 @@ spec:
             - --external-address=catalogd-service.openshift-catalogd.svc
             - --tls-cert=/var/certs/tls.crt
             - --tls-key=/var/certs/tls.key
-            - --ca-certs-dir=/run/secrets/kubernetes.io/serviceaccount
+            - --ca-certs-dir=/var/trusted-cas
             - --v=${LOG_VERBOSITY}
             - --global-pull-secret=openshift-config/pull-secret
           command:
@@ -81,6 +81,8 @@ spec:
               name: cache
             - mountPath: /var/certs
               name: catalogserver-certs
+            - mountPath: /var/trusted-cas
+              name: trusted-ca-bundle
             - mountPath: /etc/containers
               name: etc-containers
               readOnly: true
@@ -112,6 +114,10 @@ spec:
           secret:
             optional: false
             secretName: catalogserver-cert
+        - configMap:
+            name: catalogd-trusted-ca-bundle
+            optional: false
+          name: trusted-ca-bundle
         - hostPath:
             path: /etc/containers
             type: Directory
