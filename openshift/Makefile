@@ -24,3 +24,6 @@ verify-manifests: manifests
 .PHONY: test-e2e
 test-e2e: ## Run the e2e tests
 	$(MAKE) test-e2e -C $(DIR)/../
+
+.PHONY: test-e2e-techpreview
+test-e2e-techpreview: test-e2e
