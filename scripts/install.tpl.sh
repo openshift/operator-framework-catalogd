@@ -2,6 +2,7 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+# A no-op comment to test with.
 catalogd_manifest=$MANIFEST
 
 if [[ -z "$catalogd_manifest" ]]; then
