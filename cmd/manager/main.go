@@ -96,7 +96,7 @@ func main() {
 		certFile             string
 		keyFile              string
 		webhookPort          int
-		pullCasDir           string
+		caCertDir            string
 		globalPullSecret     string
 	)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
@@ -114,7 +114,7 @@ func main() {
 	flag.StringVar(&certFile, "tls-cert", "", "The certificate file used for serving catalog contents over HTTPS. Requires tls-key.")
 	flag.StringVar(&keyFile, "tls-key", "", "The key file used for serving catalog contents over HTTPS. Requires tls-cert.")
 	flag.IntVar(&webhookPort, "webhook-server-port", 9443, "The port that the mutating webhook server serves at.")
-	flag.StringVar(&pullCasDir, "pull-cas-dir", "", "The directory of TLS certificate authoritiess to use for verifying HTTPS connections to image registries.")
+	flag.StringVar(&caCertDir, "ca-certs-dir", "", "The directory of CA certificate to use for verifying HTTPS connections to image registries.")
 	flag.StringVar(&globalPullSecret, "global-pull-secret", "", "The <namespace>/<name> of the global pull secret that is going to be used to pull bundle images.")
 
 	klog.InitFlags(flag.CommandLine)
@@ -243,8 +243,8 @@ func main() {
 		BaseCachePath: unpackCacheBasePath,
 		SourceContextFunc: func(logger logr.Logger) (*types.SystemContext, error) {
 			srcContext := &types.SystemContext{
-				DockerCertPath: pullCasDir,
-				OCICertPath:    pullCasDir,
+				DockerCertPath: caCertDir,
+				OCICertPath:    caCertDir,
 			}
 			if _, err := os.Stat(authFilePath); err == nil && globalPullSecretKey != nil {
 				logger.Info("using available authentication information for pulling image")
