@@ -1,5 +1,12 @@
 # catalogd
 
+---
+> [!WARNING]  
+> Since release 4.18 and January 2025, Catalogd's functionality has been integrated into OLMv1's primary repository: [operator controller](https://github.com/openshift/operator-framework-operator-controller).
+> However, since release **4.18** includes **OLMv1** in GA and requires continued support, **CVE and bug fixes** will still need to be applied to the `release-4.18` branch.
+> The `main` branch is no longer updated. Please make all required changes against `release-4.18` branch directly.
+---
+
 Catalogd is a Kubernetes extension that unpacks [file-based catalog (FBC)](https://olm.operatorframework.io/docs/reference/file-based-catalogs/#docs) content for on-cluster clients. Currently, catalogd unpacks FBC content that is packaged and distributed as container images. The catalogd road map includes plans for unpacking other content sources, such as Git repositories and OCI artifacts. For more information, see the catalogd [issues](https://github.com/operator-framework/catalogd/issues/) page. 
 
 Catalogd helps customers discover installable content by hosting catalog metadata for Kubernetes extensions, such as Operators and controllers. For more information on the Operator Lifecycle Manager (OLM) v1 suite of microservices, see the [documentation](https://github.com/operator-framework/operator-controller/tree/main/docs) for the Operator Controller.
