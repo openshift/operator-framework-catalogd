@@ -337,6 +337,8 @@ func applyLayerFilter(srcPath string) archive.Filter {
 		h.Uid = os.Getuid()
 		h.Gid = os.Getgid()
 		h.Mode |= 0700
+		h.PAXRecords = nil
+		h.Xattrs = nil //nolint:staticcheck
 
 		cleanName := path.Clean(strings.TrimPrefix(h.Name, "/"))
 		relPath, err := filepath.Rel(cleanSrcPath, cleanName)
