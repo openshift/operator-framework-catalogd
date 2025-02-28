@@ -2,9 +2,11 @@ package source
 
 import (
 	"archive/tar"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"k8s.io/apimachinery/pkg/util/rand"
 )
 
 func TestContainersImage_applyLayerFilter(t *testing.T) {
@@ -114,6 +116,34 @@ func TestContainersImage_applyLayerFilter(t *testing.T) {
 			assertion: func(tarHeader *tar.Header, keep bool, err error) {
 				assert.False(t, keep)
 				assert.NoError(t, err)
+			},
+		},
+		{
+			name:     "correctly sets permissions, uid/gid, and file attributes",
+			srcPaths: []string{"foo"},
+			tarHeaders: []tar.Header{
+				{
+					Name: "foo/bar",
+					Mode: 0000,
+					Uid:  rand.Int(),
+					Gid:  rand.Int(),
+					Xattrs: map[string]string{ //nolint:staticcheck
+						"foo": "bar",
+					},
+					PAXRecords: map[string]string{
+						"fizz": "buzz",
+					},
+				},
+			},
+			assertion: func(tarHeader *tar.Header, keep bool, err error) {
+				assert.True(t, keep)
+				assert.NoError(t, err)
+				assert.Equal(t, "foo/bar", tarHeader.Name)
+				assert.Equal(t, int64(0700), tarHeader.Mode)
+				assert.Equal(t, os.Getuid(), tarHeader.Uid)
+				assert.Equal(t, os.Getgid(), tarHeader.Gid)
+				assert.Nil(t, tarHeader.PAXRecords)
+				assert.Nil(t, tarHeader.Xattrs) //nolint:staticcheck
 			},
 		},
 	} {
