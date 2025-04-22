@@ -11,6 +11,7 @@ resources:
 
 patches:
 - path: patches/manager_namespace_privileged.yaml
+- path: patches/manager_namespace_annotations.yaml
 - target:
     kind: Service
     name: service
