@@ -108,7 +108,7 @@ func main() {
 	flag.StringVar(&systemNamespace, "system-namespace", "", "The namespace catalogd uses for internal state, configuration, and workloads")
 	flag.StringVar(&catalogServerAddr, "catalogs-server-addr", ":8443", "The address where the unpacked catalogs' content will be accessible")
 	flag.StringVar(&externalAddr, "external-address", "catalogd-service.olmv1-system.svc", "The external address at which the http(s) server is reachable.")
-	flag.StringVar(&cacheDir, "cache-dir", "/var/cache/", "The directory in the filesystem that catalogd will use for file based caching")
+	flag.StringVar(&cacheDir, "cache-dir", "/var/cache/catalogd", "The directory in the filesystem that catalogd will use for file based caching")
 	flag.BoolVar(&catalogdVersion, "version", false, "print the catalogd version and exit")
 	flag.DurationVar(&gcInterval, "gc-interval", 12*time.Hour, "interval in which garbage collection should be run against the catalog content cache")
 	flag.StringVar(&certFile, "tls-cert", "", "The certificate file used for serving catalog and metrics. Required to enable the metrics server. Requires tls-key.")
